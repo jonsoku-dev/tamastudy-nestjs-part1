@@ -1,39 +1,74 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { Board } from './board.interface';
+import {
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
 import { CreateBoardDto } from './dto/createBoard.dto';
+import { EditBoardDto } from './dto/editBoard.dto';
+import { InjectRepository } from '@nestjs/typeorm';
+import { BoardRepository } from './board.repository';
+import { BoardEntity } from './entities/board.entity';
 
 @Injectable()
 export class BoardService {
-  private boards: Board[] = [
-    {
-      id: '1',
-      title: 'sample title',
-      desc: 'sample desc',
-      view: 0,
-    },
-  ];
+  constructor(
+    @InjectRepository(BoardRepository)
+    private readonly boardRepository: BoardRepository,
+  ) {}
 
-  getBoardList(): Board[] {
-    return this.boards;
+  getBoardList(): Promise<BoardEntity[]> {
+    return this.boardRepository.find();
   }
 
-  getBoard(boardId: string): Board {
-    const found = this.boards.find(board => board.id === boardId);
+  getBoard(boardId: string): Promise<BoardEntity> {
+    const found = this.boardRepository.findOne({
+      where: {
+        id: boardId,
+      },
+    });
     if (!found) {
       throw new NotFoundException();
     }
     return found;
   }
 
-  createBoard(createBoardDto: CreateBoardDto): Board {
-    const id = parseInt(this.boards[this.boards.length - 1].id, 10) + 1;
-    const newPost = {
-      id: String(id),
-      title: createBoardDto.title,
-      desc: createBoardDto.desc,
-      view: 0,
-    };
-    this.boards = [...this.boards, newPost];
-    return newPost;
+  createBoard(createBoardDto: CreateBoardDto): Promise<BoardEntity> {
+    return this.boardRepository
+      .create({
+        ...createBoardDto,
+      })
+      .save();
+  }
+
+  async editBoard(
+    boardId: string,
+    editBoardDto: EditBoardDto,
+  ): Promise<string> {
+    const found = this.getBoard(boardId);
+    if (!found) {
+      throw new NotFoundException();
+    }
+    const result = await this.boardRepository.update(
+      { id: boardId },
+      editBoardDto,
+    );
+    if (result.affected === 1) {
+      return 'success';
+    } else {
+      throw new InternalServerErrorException();
+    }
+  }
+
+  async deleteBoard(boardId: string): Promise<string> {
+    const found = this.getBoard(boardId);
+    if (!found) {
+      throw new NotFoundException();
+    }
+    const result = await this.boardRepository.delete({ id: boardId });
+    if (result.affected === 1) {
+      return 'success';
+    } else {
+      throw new InternalServerErrorException();
+    }
   }
 }
